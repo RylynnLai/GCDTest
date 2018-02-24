@@ -41,6 +41,12 @@
     [btn2 addTarget:self action:@selector(btn2Action) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:btn2];
     
+    UIButton *btn3 = [UIButton buttonWithType:UIButtonTypeSystem];
+    btn3.frame = CGRectMake(120, height - 50, 50, 30);
+    [btn3 setTitle:@"队列组" forState:UIControlStateNormal];
+    [btn3 addTarget:self action:@selector(btn3Action) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:btn3];
+    
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
     btn.frame = CGRectMake(width - 50, height - 50, 50, 30);
     [btn setTitle:@"clear" forState:UIControlStateNormal];
@@ -56,9 +62,11 @@
  05 异步函数+主队列：不开线程，在主线程中串行执行任务
  06 同步函数+主队列：不开线程，串行执行任务（注意死锁发生）
  
- 同步函数（dispatch_sync）和异步函数（dispatch_async）的差别在于是否开启新线程
+ 除了在主队列中，同步函数（dispatch_sync）和异步函数（dispatch_async）的差别在于是否开启新线程
  同步函数（dispatch_sync）会造成线程阻塞，直到block执行完才会返回，异步函数（dispatch_async）不会造成阻塞，会马上返回
  只有并行队列并且使用异步函数执行时才能在多个线程中执行。
+ 
+ dispatch_get_main_queue也是串行队列
  */
 
 - (void)btn1Action
@@ -68,7 +76,12 @@
 
 - (void)btn2Action
 {
-    [self test4];
+    [self test3];
+}
+
+- (void)btn3Action
+{
+    [self test6];
 }
 
 - (void)test0
@@ -134,6 +147,7 @@
 //        dispatch_sync(mainQueue, ^{
 //            [self updateImageViewWithData:data index:1];
 //        });//死锁了
+        /*前面说了dispatch_get_main_queue就是一个特殊的串行队列，dispatch_sync把dispatch_async的block阻塞，而在串行队列中又必须等前一个任务执行（dispatch_async的block）完才能执行下一个任务（dispatch_sync的block）*/
         NSLog(@"1----%@",[NSThread currentThread]);
     });
     dispatch_async(queue, ^{//开启线程
@@ -252,6 +266,91 @@
             [self updateImageViewWithData:data index:3];
         });
         NSLog(@"3----%@",[NSThread currentThread]);
+    });
+}
+
+- (void)test5
+{
+    //队列组只有异步函数
+    dispatch_group_t group1 = dispatch_group_create();
+    dispatch_group_t group2 = dispatch_group_create();
+    
+    dispatch_queue_t global_queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    dispatch_queue_t SERIAL_queue = dispatch_queue_create("SERIAL_QUEUE", DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_t main_queue = dispatch_get_main_queue();
+    
+    dispatch_group_async(group1, global_queue, ^{
+        NSData *data = [self imageDataWithIndex:0];
+            dispatch_sync(main_queue, ^{
+                [self updateImageViewWithData:data index:0];
+            });
+        NSLog(@"0----%@",[NSThread currentThread]);
+    });
+    
+    dispatch_group_async(group1, global_queue, ^{
+        NSData *data = [self imageDataWithIndex:2];
+        dispatch_sync(main_queue, ^{
+            [self updateImageViewWithData:data index:2];
+        });
+        NSLog(@"2----%@",[NSThread currentThread]);
+    });
+    
+    dispatch_group_async(group1, global_queue, ^{
+        NSData *data = [self imageDataWithIndex:4];
+        dispatch_sync(main_queue, ^{
+            [self updateImageViewWithData:data index:4];
+        });
+        NSLog(@"4----%@",[NSThread currentThread]);
+    });
+    
+    dispatch_group_async(group2, SERIAL_queue, ^{
+        NSData *data = [self imageDataWithIndex:1];
+        dispatch_sync(main_queue, ^{
+            [self updateImageViewWithData:data index:1];
+        });
+        NSLog(@"1----%@",[NSThread currentThread]);
+    });
+    
+    dispatch_group_async(group2, SERIAL_queue, ^{
+        NSData *data = [self imageDataWithIndex:3];
+        dispatch_sync(main_queue, ^{
+            [self updateImageViewWithData:data index:3];
+        });
+        NSLog(@"3----%@",[NSThread currentThread]);
+    });
+    
+    //只能检查group在这之前的添加的任务是否完成
+    dispatch_group_notify(group1, global_queue, ^{
+        NSLog(@"global_queue完成----%@",[NSThread currentThread]);
+    });
+    
+    dispatch_group_notify(group2, SERIAL_queue, ^{
+        NSLog(@"SERIAL_queue完成----%@",[NSThread currentThread]);
+    });
+}
+
+- (void)test6
+{
+    dispatch_group_t group1 = dispatch_group_create();
+    
+    if (group1) dispatch_group_enter(group1);
+    
+    NSData *data = [self imageDataWithIndex:0];
+    [self updateImageViewWithData:data index:0];
+    NSLog(@"0----%@",[NSThread currentThread]);
+    
+    data = [self imageDataWithIndex:2];
+    [self updateImageViewWithData:data index:2];
+    NSLog(@"2----%@",[NSThread currentThread]);
+    
+    data = [self imageDataWithIndex:4];
+    [self updateImageViewWithData:data index:4];
+    NSLog(@"4----%@",[NSThread currentThread]);
+    
+    if (group1) dispatch_group_leave(group1);
+
+    dispatch_group_notify(group1, dispatch_get_main_queue(), ^{
+        NSLog(@"完成----%@",[NSThread currentThread]);
     });
 }
 
