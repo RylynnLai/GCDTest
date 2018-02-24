@@ -47,6 +47,18 @@
     [btn3 addTarget:self action:@selector(btn3Action) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:btn3];
     
+    UIButton *btn4 = [UIButton buttonWithType:UIButtonTypeSystem];
+    btn4.frame = CGRectMake(170, height - 50, 50, 30);
+    [btn4 setTitle:@"栅栏" forState:UIControlStateNormal];
+    [btn4 addTarget:self action:@selector(btn4Action) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:btn4];
+    
+    UIButton *btn5 = [UIButton buttonWithType:UIButtonTypeSystem];
+    btn5.frame = CGRectMake(220, height - 50, 50, 30);
+    [btn5 setTitle:@"信号量" forState:UIControlStateNormal];
+    [btn5 addTarget:self action:@selector(btn5Action) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:btn5];
+    
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
     btn.frame = CGRectMake(width - 50, height - 50, 50, 30);
     [btn setTitle:@"clear" forState:UIControlStateNormal];
@@ -82,6 +94,16 @@
 - (void)btn3Action
 {
     [self test6];
+}
+
+- (void)btn4Action
+{
+    [self test8];
+}
+
+- (void)btn5Action
+{
+    [self test10];
 }
 
 - (void)test0
@@ -175,7 +197,7 @@
 
 - (void)test3
 {
-    //创建并行队列，但实际一般不会自己创建并行队列，而是使用系统的全局并行队列
+    //创建并行队列，但实际一般不会自己创建并行队列，而是使用系统的全局并行队列（除了dispatch_barrier_async）
 //    dispatch_queue_t queue = dispatch_queue_create("SERIAL_QUEUE", DISPATCH_QUEUE_CONCURRENT);
     
     /*
@@ -216,7 +238,7 @@
 
 - (void)test4
 {
-    //创建并行队列，但实际一般不会自己创建并行队列，而是使用系统的全局并行队列
+    //创建并行队列，但实际一般不会自己创建并行队列，而是使用系统的全局并行队列（除了dispatch_barrier_async）
     //    dispatch_queue_t queue = dispatch_queue_create("SERIAL_QUEUE", DISPATCH_QUEUE_CONCURRENT);
     
     /*
@@ -352,6 +374,162 @@
     dispatch_group_notify(group1, dispatch_get_main_queue(), ^{
         NSLog(@"完成----%@",[NSThread currentThread]);
     });
+}
+
+- (void)test7
+{
+    //对于栅栏函数，一般不会添加到全局并发队列中影响到其他任务，而是添加在自定义的并发队列中
+    //1.对于自定义串行队列，栅栏函数没有意义，因为串行队列本来就是一个一个执行
+    //2.对于全局并发队列，会影响到其他的的全局队列任务，不适合使用
+    //3.最适合使用的只有自定义并发队列
+    
+    //对于异步栅栏函数dispatch_barrier_async，总是立即返回，同时会等待在这之前加入队列的并发任务（串行任务本来就一个个执行，这里没有意义）全部执行完，行程队列阻塞（不是线程阻塞），然后执行dispatch_barrier_async的block，最后才是后面的任务。
+    dispatch_queue_t queue = dispatch_queue_create("download.queue", DISPATCH_QUEUE_CONCURRENT);;
+    
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:0];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+        dispatch_sync(mainQueue, ^{
+            [self updateImageViewWithData:data index:0];
+        });
+        NSLog(@"0----%@",[NSThread currentThread]);
+    });
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:1];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+        dispatch_sync(mainQueue, ^{
+            [self updateImageViewWithData:data index:1];
+        });
+        NSLog(@"1----%@",[NSThread currentThread]);
+    });
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:4];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+        dispatch_sync(mainQueue, ^{
+            [self updateImageViewWithData:data index:4];
+        });
+        NSLog(@"4----%@",[NSThread currentThread]);
+    });
+    
+    dispatch_barrier_async(queue, ^{
+        NSLog(@"dispatch_barrier_async------%@", [NSThread currentThread]);
+    });
+    
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:2];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+        dispatch_sync(mainQueue, ^{
+            [self updateImageViewWithData:data index:2];
+        });
+        NSLog(@"2----%@",[NSThread currentThread]);
+    });
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:3];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+        dispatch_sync(mainQueue, ^{
+            [self updateImageViewWithData:data index:3];
+        });
+        NSLog(@"3----%@",[NSThread currentThread]);
+    });
+}
+
+- (void)test8
+{
+    dispatch_queue_t queue = dispatch_queue_create("download.queue", DISPATCH_QUEUE_CONCURRENT);;
+    
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:0];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+//        dispatch_sync(mainQueue, ^{
+//            [self updateImageViewWithData:data index:0];
+//        });
+        NSLog(@"0----%@",[NSThread currentThread]);
+    });
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:1];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+//        dispatch_sync(mainQueue, ^{
+//            [self updateImageViewWithData:data index:1];
+//        });
+        NSLog(@"1----%@",[NSThread currentThread]);
+    });
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:4];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+//        dispatch_sync(mainQueue, ^{
+//            [self updateImageViewWithData:data index:4];
+//        });
+        NSLog(@"4----%@",[NSThread currentThread]);
+    });
+    
+    //dispatch_barrier_sync会阻塞线程，注意死锁
+    dispatch_barrier_sync(queue, ^{
+        [self imageDataWithIndex:4];
+        NSLog(@"dispatch_barrier_async------%@", [NSThread currentThread]);
+    });
+    
+    NSLog(@"aaa");
+    
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:2];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+//        dispatch_sync(mainQueue, ^{
+//            [self updateImageViewWithData:data index:2];
+//        });
+        NSLog(@"2----%@",[NSThread currentThread]);
+    });
+    dispatch_async(queue, ^{
+        NSData *data = [self imageDataWithIndex:3];
+        dispatch_queue_t mainQueue= dispatch_get_main_queue();
+//        dispatch_sync(mainQueue, ^{
+//            [self updateImageViewWithData:data index:3];
+//        });
+        NSLog(@"3----%@",[NSThread currentThread]);
+    });
+}
+
+- (void)test9
+{
+    dispatch_group_t group = dispatch_group_create();
+    //    创建信号 信号量为3
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(3);
+    //    取得默认的全局并发队列
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    for(int i = 0; i < 10; i++)
+    {
+        //    由于信号量为3 队列里面最多会有3个人任务被执行，
+        dispatch_semaphore_wait(semaphore,DISPATCH_TIME_FOREVER);
+        //    任务加到组内被监听
+        dispatch_group_async(group, queue, ^{
+            [self imageDataWithIndex:1];
+            NSLog(@"%i", i);
+            dispatch_semaphore_signal(semaphore);//任务完成后，添加一个信号，允许新的任务执行
+        });
+    }
+    //阻塞等待group任务结束
+    dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
+    NSLog(@"结束");
+}
+
+- (void)test10
+{
+    //    创建信号 信号量为3
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(3);
+    //    取得默认的全局并发队列
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    for(int i = 0; i < 10; i++)
+    {
+        //    由于信号量为3 队列里面最多会有3个人任务被执行，
+        dispatch_semaphore_wait(semaphore,DISPATCH_TIME_FOREVER);
+        //    任务加到组内被监听
+        dispatch_async(queue, ^{
+            [self imageDataWithIndex:1];
+            NSLog(@"%i", i);
+            dispatch_semaphore_signal(semaphore);//任务完成后，添加一个信号，允许新的任务执行
+        });
+    }
+    //上面的循环结束后，不会阻塞线程
+    NSLog(@"结束");
 }
 
 - (void)clearAction
